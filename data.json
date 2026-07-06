@@ -19,7 +19,7 @@
     "codename": "plato",
     "screenshotImage": "assets/img/screenshot-placeholder.svg",
     "specs": [
-      { "icon": "cpu", "label": "Chipset", "value": "MediaTek Dimensity 8200 Ultra" },
+      { "icon": "cpu", "label": "Chipset", "value": "MediaTek Dimensity 8100 Ultra" },
       { "icon": "display", "label": "Display", "value": "6.67\" AMOLED, 120Hz" },
       { "icon": "battery", "label": "Battery", "value": "5000 mAh, 120W wired" },
       { "icon": "memory", "label": "Memory", "value": "8/12GB RAM / 128–256GB storage" },
