@@ -1,0 +1,80 @@
+{
+  "_comment": "Editorial content lives here. Release version, date, download link, telegram, changelog etc. are fetched live at runtime from the URLs in 'remote' below and will override the matching fields here if the fetch succeeds. The fields under latestRelease/changelog/links act only as an offline fallback (e.g. if the remote source is briefly unreachable).",
+
+  "remote": {
+    "_comment": "Live data sources for this device. Point these at your own plato.json / changelog.txt to switch devices.",
+    "releaseJsonUrl": "https://skyx-arch.github.io/crdroid-ota/plato.json",
+    "changelogUrl": "https://skyx-arch.github.io/crdroid-ota/plato_changelog.txt"
+  },
+
+  "rom": {
+    "name": "crDroid",
+    "tagline": "Custom Android firmware built for speed, privacy and a clean, distraction-free experience.",
+    "logoImage": "assets/img/logo.svg"
+  },
+
+  "device": {
+    "name": "Xiaomi 12T",
+    "codename": "plato",
+    "screenshotImage": "assets/img/screenshot-placeholder.svg",
+    "specs": [
+      { "icon": "cpu", "label": "Chipset", "value": "MediaTek Dimensity 8200 Ultra" },
+      { "icon": "display", "label": "Display", "value": "6.67\" AMOLED, 120Hz" },
+      { "icon": "battery", "label": "Battery", "value": "5000 mAh, 120W wired" },
+      { "icon": "memory", "label": "Memory", "value": "8/12GB RAM / 128–256GB storage" },
+      { "icon": "camera", "label": "Camera", "value": "108MP main + 8MP ultrawide + 2MP macro" },
+      { "icon": "android", "label": "Base", "value": "Android 16 (crDroid)" }
+    ]
+  },
+
+  "latestRelease": {
+    "version": "12.11",
+    "codename": "Unofficial",
+    "date": "2026-07-05",
+    "androidBase": "Android 16",
+    "summary": "The newest crDroid build for plato. See the full changelog below for everything that changed."
+  },
+
+  "changelog": [
+    {
+      "date": "2026-07-05",
+      "changes": [
+        "Improved refresh rate behavior for smoother animations and scrolling",
+        "Enabled advanced ZRAM and UFS performance optimizations for better multitasking",
+        "Enabled Zero Shutter Lag (ZSL) support for faster camera capture"
+      ]
+    }
+  ],
+
+  "installSteps": [
+    {
+      "title": "Unlock the bootloader",
+      "description": "Enable Developer Options and USB debugging, then run adb reboot bootloader followed by fastboot flashing unlock. This will wipe your device."
+    },
+    {
+      "title": "Download the build and recovery",
+      "description": "Grab the latest crDroid zip and a matching custom recovery image from the downloads section below."
+    },
+    {
+      "title": "Flash a custom recovery",
+      "description": "Boot into fastboot mode and run fastboot flash recovery recovery.img to install the recovery image."
+    },
+    {
+      "title": "Flash the crDroid build",
+      "description": "Reboot into recovery, select Apply update, and choose the zip you downloaded. Optionally flash GApps in the same session."
+    },
+    {
+      "title": "Reboot into crDroid",
+      "description": "Return to the main recovery menu and select Reboot system now. First boot can take a few minutes — this is normal."
+    }
+  ],
+
+  "links": {
+    "github": "https://github.com/SkyX-Arch/crdroid-ota",
+    "downloads": "https://github.com/SkyX-Arch/crdroid-ota/releases/latest",
+    "releases": "https://github.com/SkyX-Arch/crdroid-ota/releases",
+    "telegram": "https://t.me/SkyXArch",
+    "gapps": "",
+    "firmware": ""
+  }
+}

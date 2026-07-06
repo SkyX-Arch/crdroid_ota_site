@@ -1,0 +1,12 @@
+<!-- REPLACE THIS FILE with your own logo. Keep the viewBox square-ish for best fit. -->
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D0BCFF"/>
+      <stop offset="100%" stop-color="#EFB8C8"/>
+    </linearGradient>
+  </defs>
+  <path d="M60 6C77 6 92 14 102 28C112 42 114 60 108 76C102 92 88 104 72 110C56 116 38 114 24 104C10 94 2 78 2 60C2 42 10 26 24 16C36 8 48 6 60 6Z" fill="url(#logoGrad)"/>
+  <path d="M42 40L60 30L78 40V78L60 90L42 78Z" fill="#141218" opacity="0.85"/>
+  <circle cx="60" cy="60" r="10" fill="#D0BCFF"/>
+</svg>
