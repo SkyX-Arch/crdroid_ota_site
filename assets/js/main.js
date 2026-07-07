@@ -25,7 +25,8 @@ const ICONS = {
   warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
-  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>'
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>',
+  tip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>'
 };
 
 // Escapes text before it goes inside a code block — shell commands often
@@ -68,10 +69,49 @@ async function loadText(url) {
 }
 
 // -----------------------------------------------------------------------
-// Remote release JSON — matches the crDroid OTA "response": [...] format.
+// Remote release JSON — field NAMES vary between ROMs (some use "download",
+// others "url" or "downloadUrl"; some nest the release list under a
+// different key, etc). Instead of hardcoding crDroid's field names, every
+// lookup below goes through releaseJsonMap (configured in data.json), so
+// adapting to a different ROM's OTA JSON is a data.json edit, not a code edit.
 // -----------------------------------------------------------------------
+
+// Reads a (possibly nested) value out of an object using a "a.b.c" path.
+// Used both to locate the release list inside the JSON and to read
+// individual fields, since some ROMs nest fields (e.g. "meta.version").
+function getByPath(obj, path) {
+  if (!path) return obj;
+  return path.split('.').reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
+}
+
+// Looks up one logical field (e.g. "version") on a release entry, using the
+// JSON key name configured for it in releaseJsonMap.fields, falling back to
+// the field's own name if nothing is configured.
+function getMappedField(entry, map, fieldKey) {
+  const jsonKey = (map.fields && map.fields[fieldKey]) || fieldKey;
+  return getByPath(entry, jsonKey);
+}
+
+// Converts whatever date representation the feed uses into a plain
+// YYYY-MM-DD string, based on releaseJsonMap.dateFormat.
+function normalizeReleaseDate(rawValue, dateFormat) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+
+  switch (dateFormat) {
+    case 'unix_millis':
+      return new Date(Number(rawValue)).toISOString().split('T')[0];
+    case 'iso':
+    case 'text':
+      return String(rawValue).split('T')[0];
+    case 'unix_seconds':
+    default:
+      return new Date(Number(rawValue) * 1000).toISOString().split('T')[0];
+  }
+}
+
 function pickRepoUrlsFromDownloadLink(downloadUrl) {
   // Expected shape: https://github.com/<owner>/<repo>/releases/download/<tag>/<file>
+  // Harmless no-op if the ROM hosts downloads somewhere else — it just won't match.
   const match = downloadUrl && downloadUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\//);
   if (!match) return null;
   const [, owner, repo] = match;
@@ -81,40 +121,74 @@ function pickRepoUrlsFromDownloadLink(downloadUrl) {
   };
 }
 
-function pickCodenameFromFilename(filename) {
-  // Expected shape: crDroidAndroid-16.0-20260705-plato-v12.11.zip
-  const match = filename && filename.match(/^crDroidAndroid-([\d.]+)-\d{8}-([^-]+)-v/);
-  return match ? { androidBase: `Android ${match[1].split('.')[0]}`, codename: match[2] } : null;
+// Optional: pulls the device codename / Android base version out of the
+// build filename using a regex configured in releaseJsonMap.filenamePattern,
+// which must use named capture groups (?<codename>...) and (?<androidBase>...).
+// If no pattern is configured, this is skipped and data.json's own
+// device.codename / latestRelease.androidBase are left untouched.
+function pickCodenameFromFilename(filename, pattern) {
+  if (!filename || !pattern) return null;
+  try {
+    const match = filename.match(new RegExp(pattern));
+    if (!match || !match.groups) return null;
+    const { codename, androidBase } = match.groups;
+    return {
+      codename: codename || null,
+      androidBase: androidBase ? `Android ${androidBase.split('.')[0]}` : null
+    };
+  } catch (err) {
+    console.error('Invalid releaseJsonMap.filenamePattern regex:', err);
+    return null;
+  }
 }
 
-// Applies one release entry (from plato.json's "response" array) onto the page data.
-function applyRemoteRelease(pageData, release) {
+// Picks the latest release entry out of the raw JSON feed using
+// releaseJsonMap.listPath (dot-path to the array) and .entryIndex.
+function extractReleaseEntry(feedJson, map) {
+  const list = map.listPath ? getByPath(feedJson, map.listPath) : feedJson;
+  const array = Array.isArray(list) ? list : [list].filter(Boolean);
+  return array[map.entryIndex ?? 0];
+}
+
+// Applies one release entry onto the page data, using releaseJsonMap to
+// resolve each ROM-specific field name.
+function applyRemoteRelease(pageData, release, map) {
   if (!release) return;
 
-  const parsedFilename = pickCodenameFromFilename(release.filename);
-  const repoUrls = pickRepoUrlsFromDownloadLink(release.download);
-  const dateIso = release.timestamp
-    ? new Date(release.timestamp * 1000).toISOString().split('T')[0]
-    : pageData.latestRelease.date;
+  const version = getMappedField(release, map, 'version');
+  const deviceName = getMappedField(release, map, 'device');
+  const filename = getMappedField(release, map, 'filename');
+  const download = getMappedField(release, map, 'download');
+  const rawDate = getMappedField(release, map, 'date');
+  const buildType = getMappedField(release, map, 'buildType');
+  const maintainer = getMappedField(release, map, 'maintainer');
+  const size = getMappedField(release, map, 'size');
+  const telegram = getMappedField(release, map, 'telegram');
+  const gapps = getMappedField(release, map, 'gapps');
+  const firmware = getMappedField(release, map, 'firmware');
 
-  if (release.device) pageData.device.name = release.device;
+  const parsedFilename = pickCodenameFromFilename(filename, map.filenamePattern);
+  const repoUrls = pickRepoUrlsFromDownloadLink(download);
+  const dateIso = normalizeReleaseDate(rawDate, map.dateFormat) || pageData.latestRelease.date;
+
+  if (deviceName) pageData.device.name = deviceName;
   if (parsedFilename) {
-    pageData.device.codename = parsedFilename.codename;
-    pageData.latestRelease.androidBase = parsedFilename.androidBase;
+    if (parsedFilename.codename) pageData.device.codename = parsedFilename.codename;
+    if (parsedFilename.androidBase) pageData.latestRelease.androidBase = parsedFilename.androidBase;
   }
 
-  pageData.latestRelease.version = release.version || pageData.latestRelease.version;
-  pageData.latestRelease.codename = release.buildtype || pageData.latestRelease.codename;
+  pageData.latestRelease.version = version || pageData.latestRelease.version;
+  pageData.latestRelease.codename = buildType || pageData.latestRelease.codename;
   pageData.latestRelease.date = dateIso;
-  pageData.latestRelease.maintainer = release.maintainer;
-  pageData.latestRelease.size = formatSize(release.size);
+  pageData.latestRelease.maintainer = maintainer;
+  pageData.latestRelease.size = formatSize(size);
 
   // NOTE: links.downloads is intentionally NOT overwritten here — it stays
   // fully controlled by data.json (e.g. a stable ".../releases/latest" page)
-  // rather than being replaced by this build's direct .zip URL.
-  if (release.telegram) pageData.links.telegram = release.telegram;
-  if (release.gapps) pageData.links.gapps = release.gapps;
-  if (release.firmware) pageData.links.firmware = release.firmware;
+  // rather than being replaced by this build's direct download URL.
+  if (telegram) pageData.links.telegram = telegram;
+  if (gapps) pageData.links.gapps = gapps;
+  if (firmware) pageData.links.firmware = firmware;
   if (repoUrls) {
     pageData.links.github = repoUrls.repoUrl;
     pageData.links.releases = repoUrls.releasesUrl;
@@ -122,15 +196,24 @@ function applyRemoteRelease(pageData, release) {
 }
 
 // -----------------------------------------------------------------------
-// Remote changelog text — dated blocks separated by "====" rule lines,
-// each containing "- " bullet lines. See plato_changelog.txt for the format.
+// Remote changelog text — formats vary (dash vs asterisk bullets, "----"
+// vs "====" underlines, etc), so the date pattern and bullet characters are
+// configurable via changelogMap in data.json instead of hardcoded here.
 // -----------------------------------------------------------------------
-function parseChangelogText(text) {
+function parseChangelogText(text, map = {}) {
+  const dateLinePattern = new RegExp(map.dateLinePattern || '^\\d{4}-\\d{2}-\\d{2}$');
+  const bulletChars = (map.bulletPrefixes && map.bulletPrefixes.length > 0)
+    ? map.bulletPrefixes
+    : ['-', '*'];
+  const bulletClass = bulletChars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
+  const bulletLineRegex = new RegExp(`^[${bulletClass}]+\\s*`);
+  const separatorLineRegex = new RegExp(`^([${bulletClass}=_])\\1+$`); // e.g. "----", "====", "****"
+
   const lines = text.split('\n');
   const dateLineIndexes = [];
 
   lines.forEach((line, index) => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(line.trim())) {
+    if (dateLinePattern.test(line.trim())) {
       dateLineIndexes.push(index);
     }
   });
@@ -140,8 +223,8 @@ function parseChangelogText(text) {
     const block = lines.slice(startIndex, endIndex);
     const changes = block
       .map(line => line.trim())
-      .filter(line => line.startsWith('-') && !/^-+$/.test(line)) // drop bullets AND dashed underlines
-      .map(line => line.replace(/^-+\s*/, ''));
+      .filter(line => bulletLineRegex.test(line) && !separatorLineRegex.test(line))
+      .map(line => line.replace(bulletLineRegex, ''));
 
     return {
       date: lines[startIndex].trim(),
@@ -166,6 +249,53 @@ function applyRemoteChangelog(pageData, entries) {
 // -----------------------------------------------------------------------
 // Rendering
 // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// Theme colors — lets data.json override the Material You accent palette to
+// match a specific ROM's branding, without touching any CSS. Only the
+// accent hues need to be supplied; the "on-primary" text color (used for
+// filled-button text) is auto-computed for contrast unless overridden, and
+// --color-primary-container derives from --color-primary automatically via
+// color-mix() in the stylesheet.
+// -----------------------------------------------------------------------
+function hexToRgb(hex) {
+  const clean = String(hex).trim().replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  if (!/^[0-9a-f]{6}$/i.test(full)) return null;
+  const num = parseInt(full, 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+
+// WCAG relative luminance, used to decide whether dark or light text reads
+// better on a given accent color.
+function relativeLuminance(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return 0.5;
+  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map(channel => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastTextFor(hex) {
+  return relativeLuminance(hex) > 0.55 ? '#1B1523' : '#FFFFFF';
+}
+
+function applyTheme(theme) {
+  if (!theme) return;
+  const root = document.documentElement.style;
+
+  if (theme.primary) {
+    root.setProperty('--color-primary', theme.primary);
+    root.setProperty('--color-on-primary', theme.onPrimary || contrastTextFor(theme.primary));
+  }
+  if (theme.secondary) root.setProperty('--color-secondary', theme.secondary);
+  if (theme.tertiary) root.setProperty('--color-tertiary', theme.tertiary);
+  // Optional manual override; otherwise the stylesheet derives this from
+  // --color-primary via color-mix() automatically.
+  if (theme.primaryContainer) root.setProperty('--color-primary-container', theme.primaryContainer);
+}
+
 function renderHero(data) {
   const { rom, latestRelease } = data;
 
@@ -200,13 +330,24 @@ function renderHero(data) {
   }
 }
 
+// Gallery state for the screenshot lightbox — populated by renderDevice,
+// read by the lightbox open/next/prev functions below.
+let galleryImages = [];
+let galleryIndex = 0;
+
 function renderDevice(data) {
   const { device } = data;
 
   document.getElementById('device-name').textContent = device.name;
   document.getElementById('device-codename').textContent = `Codename: ${device.codename}`;
-  document.getElementById('device-screenshot').src = device.screenshotImage;
-  document.getElementById('device-screenshot').alt = `${device.name} running ${data.rom.name}`;
+
+  galleryImages = (device.screenshots && device.screenshots.length > 0)
+    ? device.screenshots
+    : [{ src: 'assets/img/screenshot-placeholder.svg', caption: '' }];
+
+  const screenshotImg = document.getElementById('device-screenshot');
+  screenshotImg.src = galleryImages[0].src;
+  screenshotImg.alt = `${device.name} running ${data.rom.name}`;
 
   const grid = document.getElementById('specs-grid');
   grid.innerHTML = device.specs.map(spec => `
@@ -266,7 +407,7 @@ function renderCodeBlock(lines) {
 
 function renderCallout(type, text) {
   if (!text) return '';
-  const icon = type === 'warning' ? 'warning' : 'info';
+  const icon = type === 'warning' ? 'warning' : type === 'tip' ? 'tip' : 'info';
   return `
     <div class="install-callout install-callout-${type} reveal">
       <span class="install-callout-icon">${iconMarkup(icon)}</span>
@@ -314,6 +455,7 @@ function renderInstallIntro(data) {
   ` : '';
 
   container.innerHTML = [
+    renderCallout('tip', guide.otaNote),
     renderCallout('warning', guide.warning),
     requirementsBlock,
     renderCallout('important', guide.importantNote)
@@ -422,6 +564,71 @@ function initHeaderScrollState() {
   onScroll();
 }
 
+// -----------------------------------------------------------------------
+// Screenshot lightbox — opens on clicking the phone mockup, browses through
+// device.screenshots from data.json (populated into galleryImages above).
+// -----------------------------------------------------------------------
+function updateLightboxImage() {
+  const item = galleryImages[galleryIndex];
+  const image = document.getElementById('lightbox-image');
+  image.src = item.src;
+  image.alt = item.caption || 'Screenshot';
+  document.getElementById('lightbox-caption').textContent = item.caption || '';
+  document.getElementById('lightbox-counter').textContent = `${galleryIndex + 1} / ${galleryImages.length}`;
+
+  const hasMultiple = galleryImages.length > 1;
+  document.getElementById('lightbox-prev').style.display = hasMultiple ? '' : 'none';
+  document.getElementById('lightbox-next').style.display = hasMultiple ? '' : 'none';
+  document.getElementById('lightbox-counter').style.display = hasMultiple ? '' : 'none';
+}
+
+function openLightbox(startIndex) {
+  galleryIndex = ((startIndex % galleryImages.length) + galleryImages.length) % galleryImages.length;
+  updateLightboxImage();
+  document.getElementById('screenshot-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden'; // prevent background scroll while open
+}
+
+function closeLightbox() {
+  document.getElementById('screenshot-lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function stepLightbox(delta) {
+  galleryIndex = ((galleryIndex + delta) % galleryImages.length + galleryImages.length) % galleryImages.length;
+  updateLightboxImage();
+}
+
+function initLightbox() {
+  const phoneScreen = document.getElementById('phone-screen');
+  const lightbox = document.getElementById('screenshot-lightbox');
+
+  const openFromPhone = () => openLightbox(0);
+  phoneScreen.addEventListener('click', openFromPhone);
+  phoneScreen.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openFromPhone();
+    }
+  });
+
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox-prev').addEventListener('click', () => stepLightbox(-1));
+  document.getElementById('lightbox-next').addEventListener('click', () => stepLightbox(1));
+
+  // Click on the dark backdrop (not the image itself) closes the lightbox.
+  lightbox.addEventListener('click', (event) => {
+    if (event.target === lightbox) closeLightbox();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (!lightbox.classList.contains('open')) return;
+    if (event.key === 'Escape') closeLightbox();
+    if (event.key === 'ArrowLeft') stepLightbox(-1);
+    if (event.key === 'ArrowRight') stepLightbox(1);
+  });
+}
+
 function renderAll(data) {
   renderHero(data);
   renderDevice(data);
@@ -443,19 +650,24 @@ async function init() {
     return;
   }
 
+  // Theme colors apply before first render so nothing flashes the default palette.
+  applyTheme(data.theme);
+
   // Render immediately with the local/editorial data so the page is never empty,
   // then overlay live data from the remote sources as soon as it arrives.
   renderAll(data);
   initScrollReveal();
   initHeaderScrollState();
   initCodeCopyButtons();
+  initLightbox();
 
   const remote = data.remote || {};
 
   if (remote.releaseJsonUrl) {
     try {
       const releaseFeed = await loadJson(remote.releaseJsonUrl);
-      applyRemoteRelease(data, releaseFeed.response && releaseFeed.response[0]);
+      const releaseMap = remote.releaseJsonMap || {};
+      applyRemoteRelease(data, extractReleaseEntry(releaseFeed, releaseMap), releaseMap);
     } catch (err) {
       console.error('Failed to load live release data, keeping local fallback:', err);
     }
@@ -464,7 +676,7 @@ async function init() {
   if (remote.changelogUrl) {
     try {
       const changelogText = await loadText(remote.changelogUrl);
-      applyRemoteChangelog(data, parseChangelogText(changelogText));
+      applyRemoteChangelog(data, parseChangelogText(changelogText, remote.changelogMap || {}));
     } catch (err) {
       console.error('Failed to load live changelog, keeping local fallback:', err);
     }
