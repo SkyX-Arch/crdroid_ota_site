@@ -305,7 +305,7 @@
             "important": "Formatting data is required when installing the ROM."
           },
           {
-            "title": "Flash crDroid",
+            "title": "Flash AxionOS",
             "description": "From your computer:",
             "code": ["adb sideload <AxionOS>.zip"],
             "note": "If Recovery prompts for a reboot at approximately 47%, confirm it."
