@@ -56,6 +56,19 @@ function formatSize(bytes) {
   return `${gb.toFixed(2)} GB`;
 }
 
+// Appends a "?v=<version>" cache-busting query param to a LOCAL image path.
+// Without this, replacing e.g. assets/img/logo.svg with new artwork but
+// keeping the same filename can leave browsers showing the old cached copy
+// indefinitely; bumping "assetVersion" in data.json forces a re-fetch.
+// Left untouched for absolute/external URLs (nothing to bust there, and we
+// shouldn't tack unexpected query params onto someone else's server).
+function withCacheBust(url, version) {
+  if (!url || !version) return url;
+  if (/^([a-z]+:)?\/\//i.test(url)) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}v=${encodeURIComponent(version)}`;
+}
+
 async function loadJson(url) {
   const response = await fetch(url, { cache: 'no-cache' });
   if (!response.ok) throw new Error(`Request failed (${response.status}): ${url}`);
@@ -313,6 +326,34 @@ function applyTheme(theme) {
   if (theme.primaryContainer) root.setProperty('--color-primary-container', theme.primaryContainer);
 }
 
+let currentHub = null; // set once in init(); used by renderFooter() when no profile is open (hub view)
+
+// Renders the footer credit line. Pass a profile when a specific ROM's page
+// is open; pass null on the hub view, where there's no single ROM to credit —
+// falling back to the collection's own identity instead of leaving stale
+// placeholder text ("ROM") visible.
+function renderFooter(profile) {
+  const romNameEl = document.getElementById('footer-rom-name');
+  const creditEl = document.getElementById('footer-credit');
+
+  if (profile) {
+    romNameEl.textContent = profile.rom.name;
+    const author = profile.rom.author;
+    if (author && author.name) {
+      const link = author.url
+        ? `<a href="${author.url}" target="_blank" rel="noopener">${author.name}</a>`
+        : author.name;
+      creditEl.innerHTML = `Site &amp; ROM maintained by ${link}`;
+    } else {
+      creditEl.innerHTML = '';
+    }
+    return;
+  }
+
+  romNameEl.textContent = (currentHub && currentHub.title) || 'this site';
+  creditEl.innerHTML = '';
+}
+
 function renderHero(data) {
   const { rom, latestRelease } = data;
 
@@ -322,7 +363,6 @@ function renderHero(data) {
 
   document.getElementById('hero-title').textContent = rom.name;
   document.getElementById('hero-tagline').textContent = rom.tagline;
-  document.getElementById('footer-rom-name').textContent = rom.name;
 
   // Every other spot the ROM name appears in static markup (nav CTA button,
   // install section heading/subheading) — kept as ROM-name-aware spans in
@@ -334,26 +374,17 @@ function renderHero(data) {
   const installSubheadingName = document.getElementById('install-subheading-rom-name');
   if (installSubheadingName) installSubheadingName.textContent = rom.name;
 
-  const creditEl = document.getElementById('footer-credit');
-  if (rom.author && rom.author.name) {
-    const link = rom.author.url
-      ? `<a href="${rom.author.url}" target="_blank" rel="noopener">${rom.author.name}</a>`
-      : rom.author.name;
-    creditEl.innerHTML = `Site &amp; ROM maintained by ${link}`;
-  } else {
-    creditEl.innerHTML = '';
-  }
-
   document.getElementById('hero-meta-version').textContent = latestRelease.version;
   document.getElementById('hero-meta-base').textContent = latestRelease.androidBase;
   document.getElementById('hero-meta-date').textContent = formatDate(latestRelease.date);
 
   document.getElementById('hero-download-btn').href = data.links.downloads;
 
-  // Logo images (nav + hero) are set from data so both stay in sync
-  const logoSrc = rom.logoImage;
+  // Hero logo only — the nav-brand logo belongs to the hub (the whole
+  // collection's identity) and is set once in renderHub, never here.
+  const logoSrc = rom.logoImage ? withCacheBust(rom.logoImage, data.assetVersion) : null;
   if (logoSrc) {
-    document.querySelectorAll('.hero-logo, .nav-brand img').forEach(img => {
+    document.querySelectorAll('.hero-logo').forEach(img => {
       img.src = logoSrc;
     });
   }
@@ -370,9 +401,12 @@ function renderDevice(data) {
   document.getElementById('device-name').textContent = device.name;
   document.getElementById('device-codename').textContent = `Codename: ${device.codename}`;
 
-  galleryImages = (device.screenshots && device.screenshots.length > 0)
+  const rawScreenshots = (device.screenshots && device.screenshots.length > 0)
     ? device.screenshots
     : [{ src: 'assets/img/screenshot-placeholder.svg', caption: '' }];
+  galleryImages = data.assetVersion
+    ? rawScreenshots.map(item => ({ ...item, src: withCacheBust(item.src, data.assetVersion) }))
+    : rawScreenshots;
 
   const screenshotImg = document.getElementById('device-screenshot');
   screenshotImg.src = galleryImages[0].src;
@@ -700,7 +734,7 @@ function renderHub(profiles, hub = {}) {
   document.getElementById('hub-subheading').textContent = hub.subtitle || '';
 
   document.getElementById('nav-brand-title').textContent = hub.title || 'All builds';
-  if (hub.logoImage) document.getElementById('nav-brand-logo').src = hub.logoImage;
+  if (hub.logoImage) document.getElementById('nav-brand-logo').src = withCacheBust(hub.logoImage, hub.assetVersion);
 
   const grid = document.getElementById('hub-grid');
   grid.innerHTML = profiles.map(profile => {
@@ -710,10 +744,11 @@ function renderHub(profiles, hub = {}) {
     const accentStyle = (profile.theme && profile.theme.primary)
       ? `--hub-card-accent: ${profile.theme.primary};${profile.theme.primaryContainer ? ` --hub-card-accent-container: ${profile.theme.primaryContainer};` : ''}`
       : '';
+    const cardLogoSrc = withCacheBust(rom.logoImage || 'assets/img/logo.svg', profile.assetVersion);
 
     return `
       <div class="hub-card reveal" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
-        <div class="hub-card-logo"><img src="${rom.logoImage || 'assets/img/logo.svg'}" alt=""></div>
+        <div class="hub-card-logo"><img src="${cardLogoSrc}" alt=""></div>
         <div>
           <div class="hub-card-name">${rom.name || profile.label || profile.id}</div>
           <div class="hub-card-device">${device.name || ''}${device.codename ? ` (${device.codename})` : ''}</div>
@@ -734,6 +769,9 @@ function showHubView() {
   document.getElementById('nav-links').hidden = true;
   document.getElementById('nav-cta').hidden = true;
   window.scrollTo(0, 0);
+  renderFooter(null); // hub view has no single ROM to credit — show hub-level info instead
+  initScrollReveal(); // must run AFTER unhiding: observing hidden (display:none) elements
+                       // and waiting for them to become visible later is unreliable in some browsers
 }
 
 function showDetailView(hasHub) {
@@ -743,6 +781,7 @@ function showDetailView(hasHub) {
   document.getElementById('nav-links').hidden = false;
   document.getElementById('nav-cta').hidden = false;
   window.scrollTo(0, 0);
+  initScrollReveal(); // must run AFTER unhiding, same reasoning as above
 }
 
 // Fetches and overlays a profile's live release/changelog data, guarded by
@@ -825,8 +864,8 @@ async function goToProfile(profiles, id, historyMode) {
   resetTheme();
   applyTheme(profile.theme);
   renderAll(profile);
+  renderFooter(profile);
   showDetailView(hasHub);
-  initScrollReveal();
 
   await loadRemoteDataForProfile(profile, token);
 }
@@ -875,6 +914,31 @@ function initHubNavigation(profiles) {
   window.addEventListener('popstate', () => restoreFromUrl(profiles));
 }
 
+// Shown if data.json fails to load or anything during setup throws — so a
+// real problem is visible and diagnosable instead of leaving a silently
+// blank page (which is indistinguishable from a CSS/caching issue).
+function showFatalError(message) {
+  const heading = document.getElementById('hub-heading');
+  const subheading = document.getElementById('hub-subheading');
+  const grid = document.getElementById('hub-grid');
+
+  if (heading) heading.textContent = 'Something went wrong';
+  if (subheading) subheading.textContent = '';
+  if (grid) {
+    grid.innerHTML = `
+      <div class="install-callout install-callout-warning" style="grid-column: 1 / -1;">
+        <span class="install-callout-icon">${iconMarkup('warning')}</span>
+        <span>This page failed to load: ${message}. Open the browser console (F12 → Console) for the full error, and double-check data.json is valid JSON.</span>
+      </div>
+    `;
+  }
+
+  const hubView = document.getElementById('hub-view');
+  const detailView = document.getElementById('detail-view');
+  if (hubView) hubView.hidden = false;
+  if (detailView) detailView.hidden = true;
+}
+
 async function init() {
   document.getElementById('footer-year').textContent = new Date().getFullYear();
 
@@ -883,34 +947,41 @@ async function init() {
     rawData = await loadJson('data.json');
   } catch (err) {
     console.error('Failed to load data.json:', err);
+    showFatalError('could not load data.json');
     return;
   }
 
-  const { profiles: rawProfiles, defaultProfileId, hub } = normalizeProfiles(rawData);
+  try {
+    const { profiles: rawProfiles, defaultProfileId, hub } = normalizeProfiles(rawData);
 
-  // defaultProfileId just orders the hub grid (shown first) — it no longer
-  // controls routing; the hub is always the landing page unless ?rom= is set.
-  const profiles = defaultProfileId
-    ? [...rawProfiles].sort((a, b) => (a.id === defaultProfileId ? -1 : b.id === defaultProfileId ? 1 : 0))
-    : rawProfiles;
+    // defaultProfileId just orders the hub grid (shown first) — it no longer
+    // controls routing; the hub is always the landing page unless ?rom= is set.
+    const profiles = defaultProfileId
+      ? [...rawProfiles].sort((a, b) => (a.id === defaultProfileId ? -1 : b.id === defaultProfileId ? 1 : 0))
+      : rawProfiles;
 
-  renderHub(profiles, hub);
-  initHubNavigation(profiles);
-  initHeaderScrollState();
-  initCodeCopyButtons();
-  initLightbox();
+    currentHub = hub;
+    renderHub(profiles, hub);
+    initHubNavigation(profiles);
+    initHeaderScrollState();
+    initCodeCopyButtons();
+    initLightbox();
 
-  if (profiles.length <= 1) {
-    // Single-profile site: skip the hub entirely, go straight to the page.
-    await goToProfile(profiles, profiles[0].id, 'none');
-    return;
-  }
+    if (profiles.length <= 1) {
+      // Single-profile site: skip the hub entirely, go straight to the page.
+      await goToProfile(profiles, profiles[0].id, 'none');
+      return;
+    }
 
-  const fromUrl = new URLSearchParams(window.location.search).get('rom');
-  if (fromUrl && getProfileById(profiles, fromUrl)) {
-    await goToProfile(profiles, fromUrl, 'replace');
-  } else {
-    showHubView();
+    const fromUrl = new URLSearchParams(window.location.search).get('rom');
+    if (fromUrl && getProfileById(profiles, fromUrl)) {
+      await goToProfile(profiles, fromUrl, 'replace');
+    } else {
+      showHubView();
+    }
+  } catch (err) {
+    console.error('Failed to render the page:', err);
+    showFatalError(err && err.message ? err.message : String(err));
   }
 }
 

@@ -7,13 +7,15 @@
     "_comment": "Identity for the whole collection/maintainer — shown in the nav brand (all views) and on the all-builds grid (only relevant when there's more than one profile below).",
     "title": "SkyX-Arch Builds",
     "subtitle": "All custom ROM builds maintained by SkyX-Arch — pick a device below.",
-    "logoImage": "assets/img/logo.svg"
+    "logoImage": "assets/img/logo.svg",
+    "assetVersion": "1"
   },
 
   "profiles": [
     {
       "id": "crdroid-plato",
       "label": "crDroid — Xiaomi 12T",
+      "assetVersion": "1",
 
       "remote": {
         "_comment": "Live data sources for this device. Point releaseJsonUrl/changelogUrl at your own ROM's feed to switch devices.",
@@ -179,6 +181,7 @@
       "_comment": "EXAMPLE STUB — not real data. Shows the shape a second profile (e.g. AxionOS) needs; fill in real values, a real remote feed, real specs/links, and either remove this comment-marked example or replace it entirely once you have real AxionOS data.",
       "id": "axionos-example",
       "label": "AxionOS — Example Device (edit me)",
+      "assetVersion": "1",
 
       "remote": {
         "releaseJsonUrl": "",

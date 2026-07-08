@@ -229,6 +229,23 @@ letterboxed inside the same box. For best results keep replacement art
 roughly square. The favicon link also sets `sizes="any"`, which is the
 standard fix for SVG favicons rendering at the wrong size in some browsers.
 
+## Replacing images without stale browser caches
+
+If you replace `logo.svg` or a screenshot file but *keep the same filename*,
+some visitors' browsers will keep showing the old cached copy instead of the
+new one. To force a refresh without renaming files, bump `assetVersion`:
+
+- `hub.assetVersion` — bumps the nav-bar/hub logo (`hub.logoImage`).
+- Each profile's own `assetVersion` — bumps that profile's `rom.logoImage`
+  (hero logo + its hub-grid tile thumbnail) and all of its
+  `device.screenshots`.
+
+It can be any string or number (`"1"`, `"2026-07-08"`, etc.) — the page just
+appends it as a `?v=...` query param to those image URLs, so browsers treat
+it as a new file the moment the version changes. Leave it unset (or
+unchanged) and normal caching applies as usual; there's no need to bump it
+for edits that aren't image replacements (e.g. changing `rom.tagline`).
+
 ## Running locally
 
 No build step is required. Because the page fetches JSON with `fetch()`,
