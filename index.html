@@ -8,7 +8,7 @@
   <meta name="description" content="A custom Android firmware landing page." id="meta-description">
   <!-- sizes="any" tells the browser this SVG can be scaled to whatever pixel
        size the tab/bookmark needs, instead of assuming a fixed intrinsic size -->
-  <link rel="icon" type="image/svg+xml" sizes="any" href="assets/img/logo main.svg">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="assets/img/favicon.svg">
 
   <!-- Fonts: display face (Space Grotesk), body face (Inter), mono face (JetBrains Mono) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,7 +24,7 @@
     <div class="container nav-inner">
       <!-- Brand always shows the collection/maintainer identity (data.json's "hub" block), not a specific ROM — clicking it returns to the all-builds grid. -->
       <a href="#" class="nav-brand" id="nav-brand-link">
-        <img src="assets/img/logo.svg" alt="Logo" id="nav-brand-logo">
+        <img src="assets/img/logo.svg" alt="Logo" id="nav-brand-logo" decoding="async">
         <span id="nav-brand-title">Builds</span>
       </a>
 
@@ -66,7 +66,7 @@
       <div class="hero-blob" aria-hidden="true"></div>
       <div class="container hero-content">
         <!-- LOGO BLOCK: isolated on purpose — replace assets/img/logo.svg to rebrand -->
-        <img src="assets/img/logo.svg" alt="ROM logo" class="hero-logo" id="hero-logo">
+        <img src="assets/img/logo.svg" alt="ROM logo" class="hero-logo" id="hero-logo" decoding="async">
 
         <h1 class="hero-title" id="hero-title">ROM</h1>
         <p class="hero-tagline" id="hero-tagline">
@@ -94,7 +94,7 @@
           <div class="phone-frame">
             <div class="phone-notch"></div>
             <div class="phone-screen" id="phone-screen" role="button" tabindex="0" aria-label="View screenshot gallery">
-              <img src="assets/img/screenshot-placeholder.svg" alt="Home screen preview" id="device-screenshot">
+              <img src="assets/img/screenshot-placeholder.svg" alt="Home screen preview" id="device-screenshot" decoding="async">
               <div class="phone-zoom-hint" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
               </div>
@@ -187,8 +187,22 @@
     <div class="container">
       <p>&copy; <span id="footer-year"></span> <span id="footer-rom-name">ROM</span>. Distributed as-is, no warranty.</p>
       <p class="footer-credit" id="footer-credit"></p>
+      <button type="button" class="footer-donate-link" id="footer-donate-link" hidden>Support this project</button>
     </div>
   </footer>
+
+  <!-- ===================== DONATE MODAL ===================== -->
+  <!-- Only shown if data.json configures at least one wallet (profile-level "donate", or hub-level as a site-wide fallback). -->
+  <div class="donate-modal" id="donate-modal" aria-hidden="true">
+    <div class="donate-modal-content">
+      <button type="button" class="donate-modal-close" id="donate-modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <h3 class="donate-modal-title">Support this project</h3>
+      <p class="donate-modal-note">Completely optional — if you'd like to chip in toward development, here are some ways to. Thank you either way!</p>
+      <div class="donate-wallets" id="donate-wallets"><!-- Wallet rows injected by main.js --></div>
+    </div>
+  </div>
 
   <!-- ===================== SCREENSHOT LIGHTBOX ===================== -->
   <div class="lightbox" id="screenshot-lightbox" aria-hidden="true">
@@ -200,7 +214,7 @@
     </button>
     <div class="lightbox-content">
       <div class="lightbox-image-wrap">
-        <img src="" alt="" id="lightbox-image">
+        <img src="" alt="" id="lightbox-image" decoding="async">
       </div>
       <p class="lightbox-caption" id="lightbox-caption"></p>
     </div>

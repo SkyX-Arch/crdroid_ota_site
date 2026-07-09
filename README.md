@@ -114,6 +114,47 @@ readable contrast against `primary` if left `null`; set it explicitly only
 if the automatic choice looks wrong. `primaryContainer` similarly
 auto-derives from `primary`; override it only for fine-tuning.
 
+## Donations (optional, unobtrusive)
+
+A small **"Support this project"** text link appears in the footer — no
+banner, no popup, nothing on the main page. Clicking it opens a small modal
+with wallet addresses and a copy button for each (reusing the same
+copy-to-clipboard UI as the install guide's command blocks).
+
+Configure it in `data.json`:
+
+```json
+"donate": {
+  "bitcoin": "bc1q...",
+  "ethereum": "0x..."
+}
+```
+
+- Put it under **`hub`** for a site-wide default (shown on every profile that
+  doesn't set its own).
+- Put it inside a specific **profile** to override just that ROM's wallets
+  (e.g. a co-maintainer with their own addresses for one device).
+- Omit a currency to hide just that row; omit `donate` entirely (both at the
+  hub and profile level) to hide the "Support this project" link altogether.
+- Only Bitcoin and Ethereum are wired up out of the box; to add another
+  currency, add an entry to `DONATE_CURRENCIES` near the top of
+  `assets/js/main.js` (label + icon name) and a matching key under `donate`.
+
+## Smoother image loading
+
+Logos and screenshots fade in once actually decoded instead of popping in
+abruptly (or sitting blank) while they load, and every screenshot beyond the
+one shown in the phone mockup is quietly preloaded in the background as soon
+as a ROM's page opens — so by the time someone opens the lightbox gallery,
+the rest of the images are already cached and appear instantly instead of
+stuttering on a first-time decode. Images also set `decoding="async"` so
+decoding doesn't block the main thread.
+
+The single biggest thing you can do to keep this snappy is **keep screenshot
+files small** — export at the actual display size (a phone screenshot
+doesn't need to be a multi-megabyte 4K PNG) and compress it; a well-optimized
+screenshot is typically well under 300KB.
+
 ## The "already installed?" note
 
 `installGuide.otaNote` in `data.json` renders as a callout above the
