@@ -8,7 +8,7 @@
     "title": "SkyX-Arch Builds",
     "subtitle": "All custom ROM builds maintained by SkyX-Arch — pick a device below.",
     "logoImage": "assets/img/logo main.svg",
-    "assetVersion": "1"
+    "assetVersion": "1",
     "donate": {
       "_comment": "Optional. Shown as a small, easy-to-miss-on-purpose 'Support this project' link in the footer — omit a currency to hide it, or omit 'donate' entirely to hide the link altogether. Acts as the site-wide default; a profile can set its own 'donate' block to override this for just that ROM.",
       "bitcoin": "bc1pngx5j2sf6mhkpl8579jc5t6zn80rstrvkygu5ljclfg3jntlpkes08jqms",
