@@ -240,7 +240,6 @@
         "name": "Xiaomi 12T",
         "codename": "plato",
         "screenshots": [
-          "screenshots": [
           { "src": "assets/img/screenshot-AxionOS.svg", "caption": "Home screen" },
           { "src": "assets/img/screenshot-AxionOS-2.svg", "caption": "App drawer" },
           { "src": "assets/img/screenshot-AxionOS-3.svg", "caption": "About Phone" },
