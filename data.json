@@ -240,7 +240,12 @@
         "name": "Xiaomi 12T",
         "codename": "plato",
         "screenshots": [
-          { "src": "assets/img/screenshot-placeholder.svg", "caption": "Home screen" }
+          "screenshots": [
+          { "src": "assets/img/screenshot-AxionOS.svg", "caption": "Home screen" },
+          { "src": "assets/img/screenshot-AxionOS-2.svg", "caption": "App drawer" },
+          { "src": "assets/img/screenshot-AxionOS-3.svg", "caption": "About Phone" },
+          { "src": "assets/img/screenshot-AxionOS-4.svg", "caption": "Updater" },
+          { "src": "assets/img/screenshot-AxionOS-5.svg", "caption": "AxionOS Settings" }
         ],
         "specs": [
           { "icon": "cpu", "label": "Chipset", "value": "MediaTek Dimensity 8100 Ultra" },
