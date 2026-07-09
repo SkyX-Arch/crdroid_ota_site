@@ -1324,6 +1324,146 @@ section {
   color: var(--color-primary);
 }
 
+/* -- "Support this project" link + donate modal -- */
+.footer-donate-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  background: none;
+  border: none;
+  color: var(--color-outline);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.footer-donate-link[hidden] {
+  display: none;
+}
+
+.footer-donate-link:hover {
+  color: var(--color-primary);
+}
+
+.donate-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 9, 12, 0.85);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-medium) var(--ease-standard);
+}
+
+.donate-modal.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.donate-modal-content {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  padding: 36px;
+  box-shadow: var(--shadow-2), var(--shadow-glow);
+  transform: scale(0.96);
+  transition: transform var(--duration-medium) var(--ease-standard);
+}
+
+.donate-modal.open .donate-modal-content {
+  transform: scale(1);
+}
+
+.donate-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline-variant);
+  display: grid;
+  place-items: center;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.donate-modal-close:hover {
+  background: var(--color-primary-container);
+  color: var(--color-primary);
+}
+
+.donate-modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.donate-modal-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 20px;
+  margin-bottom: 10px;
+  padding-right: 32px;
+}
+
+.donate-modal-note {
+  font-size: 14px;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 24px;
+}
+
+.donate-wallets {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.donate-wallet-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 8px;
+}
+
+.donate-wallet-label svg {
+  width: 18px;
+  height: 18px;
+  color: var(--color-primary);
+}
+
+.donate-wallet .code-block pre {
+  font-size: 12px;
+  padding-right: 52px;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* -- Image fade-in (smooths logo/screenshot pop-in while they load) -- */
+img.fade-in {
+  opacity: 0;
+  transition: opacity var(--duration-medium) var(--ease-standard);
+}
+
+img.fade-in.img-loaded {
+  opacity: 1;
+}
+
 /* =========================================================================
    RESPONSIVE TWEAKS
    ========================================================================= */

@@ -26,7 +26,10 @@ const ICONS = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>',
-  tip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>'
+  tip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+  bitcoin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 7.5h4a2 2 0 0 1 0 4h-4zM9.5 11.5h4.5a2 2 0 0 1 0 4h-4.5zM9.5 7.5v8M11 6v1.5M13 6v1.5M11 15.5V17M13 15.5V17"/></svg>',
+  ethereum: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v7.5L18 14 12 3z"/><path d="M12 3 6 14l6-3.5z"/><path d="M12 15.5 6 14l6 6.5 6-6.5z"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.35-9.5-8.5C.8 8 2 4.5 5.5 4c2-.3 3.7.8 4.5 2.3C10.8 4.8 12.5 3.7 14.5 4 18 4.5 19.2 8 17.5 11.5 15 15.65 12 20 12 20z"/></svg>'
 };
 
 // Escapes text before it goes inside a code block — shell commands often
@@ -67,6 +70,32 @@ function withCacheBust(url, version) {
   if (/^([a-z]+:)?\/\//i.test(url)) return url;
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}v=${encodeURIComponent(version)}`;
+}
+
+// Fades an <img> in once it's actually decoded, instead of it popping in
+// abruptly (or sitting blank) while it loads. Safe to call on an image
+// that's already cached/complete — it just fades in immediately.
+function fadeInOnLoad(img) {
+  if (!img) return;
+  img.classList.add('fade-in');
+  img.classList.remove('img-loaded');
+  const reveal = () => img.classList.add('img-loaded');
+  if (img.complete && img.naturalWidth > 0) {
+    reveal();
+  } else {
+    img.addEventListener('load', reveal, { once: true });
+    img.addEventListener('error', reveal, { once: true }); // don't hide a broken image forever
+  }
+}
+
+// Warms the browser's cache for an image URL ahead of time (e.g. the rest of
+// a screenshot gallery) so opening the lightbox later feels instant instead
+// of stuttering on a first-time decode.
+function preloadImage(url) {
+  if (!url) return;
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = url;
 }
 
 async function loadJson(url) {
@@ -332,9 +361,61 @@ let currentHub = null; // set once in init(); used by renderFooter() when no pro
 // is open; pass null on the hub view, where there's no single ROM to credit —
 // falling back to the collection's own identity instead of leaving stale
 // placeholder text ("ROM") visible.
+// Currencies we know how to label/icon. Add more here (and to data.json's
+// donate object) if you want to accept something beyond BTC/ETH.
+const DONATE_CURRENCIES = {
+  bitcoin: { label: 'Bitcoin (BTC)', icon: 'bitcoin' },
+  ethereum: { label: 'Ethereum (ETH)', icon: 'ethereum' }
+};
+
+// Renders the wallet address rows (reusing the same copyable code-block
+// look as the install guide) and returns whether there was anything to show.
+function renderDonateWallets(donate) {
+  const rows = Object.keys(DONATE_CURRENCIES)
+    .filter(key => donate && donate[key])
+    .map(key => {
+      const { label, icon } = DONATE_CURRENCIES[key];
+      return `
+        <div class="donate-wallet">
+          <div class="donate-wallet-label">${iconMarkup(icon)}<span>${label}</span></div>
+          ${renderCodeBlock(donate[key])}
+        </div>
+      `;
+    });
+  document.getElementById('donate-wallets').innerHTML = rows.join('');
+  return rows.length > 0;
+}
+
+function openDonateModal() {
+  document.getElementById('donate-modal').classList.add('open');
+}
+
+function closeDonateModal() {
+  document.getElementById('donate-modal').classList.remove('open');
+}
+
+function initDonateModal() {
+  const modal = document.getElementById('donate-modal');
+  document.getElementById('footer-donate-link').addEventListener('click', openDonateModal);
+  document.getElementById('donate-modal-close').addEventListener('click', closeDonateModal);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeDonateModal(); // click on the backdrop, not the card
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeDonateModal();
+  });
+}
+
 function renderFooter(profile) {
   const romNameEl = document.getElementById('footer-rom-name');
   const creditEl = document.getElementById('footer-credit');
+  const donateLink = document.getElementById('footer-donate-link');
+
+  // A profile can set its own wallets, or the site-wide ones from data.json's
+  // hub.donate are used as a fallback — so a single maintainer's default
+  // addresses don't need repeating in every profile.
+  const donateConfig = (profile && profile.donate) || (currentHub && currentHub.donate) || null;
+  donateLink.hidden = !renderDonateWallets(donateConfig);
 
   if (profile) {
     romNameEl.textContent = profile.rom.name;
@@ -386,6 +467,7 @@ function renderHero(data) {
   if (logoSrc) {
     document.querySelectorAll('.hero-logo').forEach(img => {
       img.src = logoSrc;
+      fadeInOnLoad(img);
     });
   }
 }
@@ -411,6 +493,12 @@ function renderDevice(data) {
   const screenshotImg = document.getElementById('device-screenshot');
   screenshotImg.src = galleryImages[0].src;
   screenshotImg.alt = `${device.name} running ${data.rom.name}`;
+  fadeInOnLoad(screenshotImg);
+
+  // Warm the cache for the rest of the gallery now, in the background, so
+  // opening the lightbox later shows each image instantly instead of
+  // stuttering on a first-time decode.
+  galleryImages.slice(1).forEach(item => preloadImage(item.src));
 
   const grid = document.getElementById('specs-grid');
   grid.innerHTML = device.specs.map(spec => `
@@ -636,6 +724,7 @@ function updateLightboxImage() {
   const image = document.getElementById('lightbox-image');
   image.src = item.src;
   image.alt = item.caption || 'Screenshot';
+  fadeInOnLoad(image);
   document.getElementById('lightbox-caption').textContent = item.caption || '';
   document.getElementById('lightbox-counter').textContent = `${galleryIndex + 1} / ${galleryImages.length}`;
 
@@ -734,7 +823,11 @@ function renderHub(profiles, hub = {}) {
   document.getElementById('hub-subheading').textContent = hub.subtitle || '';
 
   document.getElementById('nav-brand-title').textContent = hub.title || 'All builds';
-  if (hub.logoImage) document.getElementById('nav-brand-logo').src = withCacheBust(hub.logoImage, hub.assetVersion);
+  if (hub.logoImage) {
+    const navBrandLogo = document.getElementById('nav-brand-logo');
+    navBrandLogo.src = withCacheBust(hub.logoImage, hub.assetVersion);
+    fadeInOnLoad(navBrandLogo);
+  }
 
   const grid = document.getElementById('hub-grid');
   grid.innerHTML = profiles.map(profile => {
@@ -748,7 +841,7 @@ function renderHub(profiles, hub = {}) {
 
     return `
       <div class="hub-card reveal" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
-        <div class="hub-card-logo"><img src="${cardLogoSrc}" alt=""></div>
+        <div class="hub-card-logo"><img src="${cardLogoSrc}" alt="" decoding="async"></div>
         <div>
           <div class="hub-card-name">${rom.name || profile.label || profile.id}</div>
           <div class="hub-card-device">${device.name || ''}${device.codename ? ` (${device.codename})` : ''}</div>
@@ -760,6 +853,8 @@ function renderHub(profiles, hub = {}) {
       </div>
     `;
   }).join('');
+
+  grid.querySelectorAll('.hub-card-logo img').forEach(fadeInOnLoad);
 }
 
 function showHubView() {
@@ -966,6 +1061,7 @@ async function init() {
     initHeaderScrollState();
     initCodeCopyButtons();
     initLightbox();
+    initDonateModal();
 
     if (profiles.length <= 1) {
       // Single-profile site: skip the hub entirely, go straight to the page.
