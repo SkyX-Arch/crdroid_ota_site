@@ -600,6 +600,7 @@ section {
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-medium) var(--ease-standard);
+  touch-action: pan-y; /* claim horizontal swipes for our own JS; still allow vertical scroll/pull-to-refresh */
 }
 
 .lightbox.open {
@@ -633,6 +634,9 @@ section {
 .lightbox-image-wrap img {
   width: 100%;
   display: block;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .lightbox-caption {

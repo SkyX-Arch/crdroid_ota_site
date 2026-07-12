@@ -98,14 +98,33 @@ function preloadImage(url) {
   img.src = url;
 }
 
-async function loadJson(url) {
-  const response = await fetch(url, { cache: 'no-cache' });
+// Default timeout for network requests. On a poor connection, failing fast
+// and falling back to cached/local data beats leaving the UI hanging.
+const FETCH_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// cacheMode: 'no-cache' (default) always revalidates with the server — right
+// for the remote OTA feeds, where a new release should show up promptly.
+// Pass 'default' for local, rarely-changing files (data.json) to let the
+// browser serve a fully cached copy on repeat visits without a network
+// round trip at all.
+async function loadJson(url, cacheMode = 'no-cache') {
+  const response = await fetchWithTimeout(url, { cache: cacheMode });
   if (!response.ok) throw new Error(`Request failed (${response.status}): ${url}`);
   return response.json();
 }
 
-async function loadText(url) {
-  const response = await fetch(url, { cache: 'no-cache' });
+async function loadText(url, cacheMode = 'no-cache') {
+  const response = await fetchWithTimeout(url, { cache: cacheMode });
   if (!response.ok) throw new Error(`Request failed (${response.status}): ${url}`);
   return response.text();
 }
@@ -779,6 +798,67 @@ function initLightbox() {
     if (event.key === 'ArrowLeft') stepLightbox(-1);
     if (event.key === 'ArrowRight') stepLightbox(1);
   });
+
+  initLightboxSwipe(lightbox);
+}
+
+// Swipe left/right to move between screenshots on touch devices — mirrors
+// the prev/next buttons and arrow-key support above.
+function initLightboxSwipe(lightbox) {
+  const SWIPE_THRESHOLD_PX = 45; // minimum horizontal travel to count as a swipe
+  const DIRECTION_RATIO = 1.5;   // must be this much more horizontal than vertical (ignores scroll-ish gestures)
+  const CLAIM_THRESHOLD_PX = 10; // small early movement used just to decide "this looks horizontal"
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let tracking = false;
+  let claimedHorizontal = false; // true once we've decided this gesture is a horizontal swipe
+
+  lightbox.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1) return; // ignore pinch/multi-touch
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+    tracking = true;
+    claimedHorizontal = false;
+  }, { passive: true });
+
+  // Without this, a mobile browser can hijack a horizontal drag for its own
+  // gesture (edge-swipe-back, pull-to-refresh, page panning) and fire
+  // touchcancel instead of touchend — so the swipe silently never registers.
+  // Calling preventDefault() here, only once the gesture is clearly
+  // horizontal, tells the browser "this one's ours" instead.
+  lightbox.addEventListener('touchmove', (event) => {
+    if (!tracking || event.touches.length !== 1) return;
+
+    const deltaX = event.touches[0].clientX - touchStartX;
+    const deltaY = event.touches[0].clientY - touchStartY;
+
+    if (!claimedHorizontal
+      && Math.abs(deltaX) > CLAIM_THRESHOLD_PX
+      && Math.abs(deltaX) > Math.abs(deltaY)) {
+      claimedHorizontal = true;
+    }
+
+    if (claimedHorizontal) event.preventDefault();
+  }, { passive: false }); // must be non-passive for preventDefault() to have any effect
+
+  lightbox.addEventListener('touchend', (event) => {
+    if (!tracking) return;
+    tracking = false;
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX;
+    const deltaY = touch.clientY - touchStartY;
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return;
+    if (Math.abs(deltaX) < Math.abs(deltaY) * DIRECTION_RATIO) return; // too vertical — not a left/right swipe
+
+    stepLightbox(deltaX < 0 ? 1 : -1); // swiped left -> next, right -> previous
+  }, { passive: true });
+
+  lightbox.addEventListener('touchcancel', () => {
+    tracking = false;
+  }, { passive: true });
 }
 
 function renderAll(data) {
@@ -841,7 +921,7 @@ function renderHub(profiles, hub = {}) {
 
     return `
       <div class="hub-card reveal" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
-        <div class="hub-card-logo"><img src="${cardLogoSrc}" alt="" decoding="async"></div>
+        <div class="hub-card-logo"><img src="${cardLogoSrc}" alt="" decoding="async" loading="lazy"></div>
         <div>
           <div class="hub-card-name">${rom.name || profile.label || profile.id}</div>
           <div class="hub-card-device">${device.name || ''}${device.codename ? ` (${device.codename})` : ''}</div>
@@ -1039,7 +1119,7 @@ async function init() {
 
   let rawData;
   try {
-    rawData = await loadJson('data.json');
+    rawData = await loadJson('data.json', 'default');
   } catch (err) {
     console.error('Failed to load data.json:', err);
     showFatalError('could not load data.json');
@@ -1082,3 +1162,13 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Registered after 'load' so it never competes with this page's own
+// first-visit requests for bandwidth — it only helps from the next visit on.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.error('Service worker registration failed (site still works fine without it):', err);
+    });
+  });
+}
