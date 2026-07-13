@@ -29,7 +29,9 @@ const ICONS = {
   tip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
   bitcoin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 7.5h4a2 2 0 0 1 0 4h-4zM9.5 11.5h4.5a2 2 0 0 1 0 4h-4.5zM9.5 7.5v8M11 6v1.5M13 6v1.5M11 15.5V17M13 15.5V17"/></svg>',
   ethereum: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v7.5L18 14 12 3z"/><path d="M12 3 6 14l6-3.5z"/><path d="M12 15.5 6 14l6 6.5 6-6.5z"/></svg>',
-  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.35-9.5-8.5C.8 8 2 4.5 5.5 4c2-.3 3.7.8 4.5 2.3C10.8 4.8 12.5 3.7 14.5 4 18 4.5 19.2 8 17.5 11.5 15 15.65 12 20 12 20z"/></svg>'
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.35-9.5-8.5C.8 8 2 4.5 5.5 4c2-.3 3.7.8 4.5 2.3C10.8 4.8 12.5 3.7 14.5 4 18 4.5 19.2 8 17.5 11.5 15 15.65 12 20 12 20z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>'
 };
 
 // Escapes text before it goes inside a code block — shell commands often
@@ -454,6 +456,37 @@ function renderFooter(profile) {
   creditEl.innerHTML = '';
 }
 
+// Frozen/discontinued profile status. Set profile.status in data.json to
+// one of these keys (or leave it unset/"active" for normal behavior).
+// profile.statusMessage can override the default wording per-profile.
+const STATUS_CONFIG = {
+  frozen: {
+    badgeLabel: 'Frozen',
+    icon: 'pause',
+    defaultMessage: 'This build is frozen — no new updates are currently being published.'
+  },
+  discontinued: {
+    badgeLabel: 'Discontinued',
+    icon: 'archive',
+    defaultMessage: 'Support for this build has been discontinued. Existing downloads remain available below, but no further updates should be expected.'
+  }
+};
+
+function renderStatusBanner(profile) {
+  const banner = document.getElementById('status-banner');
+  const config = STATUS_CONFIG[profile.status];
+
+  if (!config) {
+    banner.hidden = true;
+    return;
+  }
+
+  banner.hidden = false;
+  banner.className = `status-banner status-banner-${profile.status}`;
+  document.getElementById('status-banner-icon').innerHTML = iconMarkup(config.icon);
+  document.getElementById('status-banner-text').textContent = profile.statusMessage || config.defaultMessage;
+}
+
 function renderHero(data) {
   const { rom, latestRelease } = data;
 
@@ -869,6 +902,7 @@ function renderAll(data) {
   renderInstallIntro(data);
   renderInstallSteps(data);
   renderLinks(data);
+  renderStatusBanner(data);
 }
 
 // -----------------------------------------------------------------------
@@ -918,12 +952,17 @@ function renderHub(profiles, hub = {}) {
       ? `--hub-card-accent: ${profile.theme.primary};${profile.theme.primaryContainer ? ` --hub-card-accent-container: ${profile.theme.primaryContainer};` : ''}`
       : '';
     const cardLogoSrc = withCacheBust(rom.logoImage || 'assets/img/logo.svg', profile.assetVersion);
+    const statusConfig = STATUS_CONFIG[profile.status];
+    const statusBadge = statusConfig
+      ? `<span class="hub-card-status hub-card-status-${profile.status}">${statusConfig.badgeLabel}</span>`
+      : '';
+    const cardStatusClass = profile.status === 'discontinued' ? ' hub-card-discontinued' : '';
 
     return `
-      <div class="hub-card reveal" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
+      <div class="hub-card reveal${cardStatusClass}" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
         <div class="hub-card-logo"><img src="${cardLogoSrc}" alt="" decoding="async" loading="lazy"></div>
         <div>
-          <div class="hub-card-name">${rom.name || profile.label || profile.id}</div>
+          <div class="hub-card-name">${rom.name || profile.label || profile.id}${statusBadge}</div>
           <div class="hub-card-device">${device.name || ''}${device.codename ? ` (${device.codename})` : ''}</div>
         </div>
         <div class="hub-card-meta">
