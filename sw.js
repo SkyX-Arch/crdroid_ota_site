@@ -15,14 +15,14 @@
 // this worker never caches or serves stale data for those.
 // =============================================================================
 
-const CACHE_VERSION = '3';
+const CACHE_VERSION = '4';
 const CACHE_NAME = `romsite-shell-v${CACHE_VERSION}`;
 
 // The core files needed to render the page at all. Add a path here if you
 // add another file that's always needed (e.g. a new default screenshot).
 const APP_SHELL = [
   './',
-  'index.html',
+ 'index.html',
   'data.json',
   'assets/css/style.css',
   'assets/js/main.js',

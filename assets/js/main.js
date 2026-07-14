@@ -54,6 +54,26 @@ function formatDate(isoDate) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+// "2 days ago" / "Today" for recent dates, falling back to a plain date
+// (e.g. "12 Jul 2026") once it's more than a few weeks old — kept short so
+// it fits comfortably in a hub-card's meta row.
+function formatRelativeDate(isoDate) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86400000);
+
+  if (diffDays < 0) return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 30) return `${diffDays} days ago`;
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return `${months} month${months > 1 ? 's' : ''} ago`;
+  }
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // Formats a byte count into a human-readable size, e.g. 1929857518 -> "1.80 GB".
 function formatSize(bytes) {
   if (!bytes || Number.isNaN(Number(bytes))) return null;
@@ -427,10 +447,44 @@ function initDonateModal() {
   });
 }
 
+// Best-effort: turns a GitHub repo URL into its /issues page. Returns null
+// for anything that doesn't look like a plain github.com/owner/repo URL.
+function deriveIssuesUrl(githubUrl) {
+  if (!githubUrl) return null;
+  const match = githubUrl.match(/^https:\/\/github\.com\/[^/]+\/[^/]+/);
+  return match ? `${match[0]}/issues` : null;
+}
+
+function renderFooterLinks(profile) {
+  const container = document.getElementById('footer-links');
+  let links;
+
+  if (profile) {
+    const p = profile.links || {};
+    links = [
+      p.github ? { label: 'Source Code', url: p.github } : null,
+      p.releases ? { label: 'Releases', url: p.releases } : null,
+      deriveIssuesUrl(p.github) ? { label: 'Issues', url: deriveIssuesUrl(p.github) } : null,
+      p.telegram ? { label: 'Telegram', url: p.telegram } : null
+    ].filter(Boolean);
+  } else {
+    links = [
+      currentHub && currentHub.githubUrl ? { label: 'GitHub', url: currentHub.githubUrl } : null,
+      currentHub && currentHub.telegramUrl ? { label: 'Telegram', url: currentHub.telegramUrl } : null
+    ].filter(Boolean);
+  }
+
+  container.innerHTML = links
+    .map(link => `<a href="${link.url}" target="_blank" rel="noopener">${link.label}</a>`)
+    .join('');
+}
+
 function renderFooter(profile) {
   const romNameEl = document.getElementById('footer-rom-name');
   const creditEl = document.getElementById('footer-credit');
   const donateLink = document.getElementById('footer-donate-link');
+
+  renderFooterLinks(profile);
 
   // A profile can set its own wallets, or the site-wide ones from data.json's
   // hub.donate are used as a fallback — so a single maintainer's default
@@ -932,16 +986,75 @@ function getProfileById(profiles, id) {
   return profiles.find(profile => profile.id === id);
 }
 
+// Computes the homepage stats row purely from the profiles array — no
+// manual counts to keep in sync in data.json.
+function computeHubStats(profiles) {
+  const romCount = profiles.length;
+
+  const deviceNames = new Set(
+    profiles.map(p => (p.device && p.device.name) || '').filter(Boolean)
+  );
+
+  const androidNumbers = profiles
+    .map(p => p.latestRelease && p.latestRelease.androidBase)
+    .filter(Boolean)
+    .map(base => parseInt(String(base).replace(/[^\d]/g, ''), 10))
+    .filter(n => !Number.isNaN(n));
+  const latestAndroid = androidNumbers.length > 0 ? Math.max(...androidNumbers) : null;
+
+  const otaSupported = profiles.some(p => p.remote && p.remote.releaseJsonUrl);
+
+  return [
+    { value: String(romCount), label: romCount === 1 ? 'Supported ROM' : 'Supported ROMs' },
+    { value: String(deviceNames.size), label: deviceNames.size === 1 ? 'Supported Device' : 'Supported Devices' },
+    { value: latestAndroid ? `Android ${latestAndroid}` : '—', label: 'Latest Base' },
+    { value: otaSupported ? 'Supported' : 'Manual', label: 'OTA Updates' }
+  ];
+}
+
+function renderHubStats(profiles) {
+  const container = document.getElementById('hub-stats');
+  container.innerHTML = computeHubStats(profiles).map(stat => `
+    <div class="hub-stat-card reveal">
+      <div class="hub-stat-value">${stat.value}</div>
+      <div class="hub-stat-label">${stat.label}</div>
+    </div>
+  `).join('');
+}
+
+// Sets an external link's href and hides it if the URL isn't configured —
+// used for every GitHub/Telegram link across the header, drawer and hero.
+function setExternalLink(elementId, url) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (url) {
+    el.href = url;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
 function renderHub(profiles, hub = {}) {
   document.getElementById('hub-heading').textContent = hub.title || 'All builds';
   document.getElementById('hub-subheading').textContent = hub.subtitle || '';
-
   document.getElementById('nav-brand-title').textContent = hub.title || 'All builds';
+
   if (hub.logoImage) {
-    const navBrandLogo = document.getElementById('nav-brand-logo');
-    navBrandLogo.src = withCacheBust(hub.logoImage, hub.assetVersion);
-    fadeInOnLoad(navBrandLogo);
+    const busted = withCacheBust(hub.logoImage, hub.assetVersion);
+    [document.getElementById('nav-brand-logo'), document.getElementById('hub-hero-logo')].forEach(img => {
+      img.src = busted;
+      fadeInOnLoad(img);
+    });
   }
+
+  setExternalLink('hub-cta-github', hub.githubUrl);
+  setExternalLink('hub-nav-github', hub.githubUrl);
+  setExternalLink('hub-nav-telegram', hub.telegramUrl);
+  setExternalLink('nav-drawer-github', hub.githubUrl);
+  setExternalLink('nav-drawer-telegram', hub.telegramUrl);
+
+  renderHubStats(profiles);
 
   const grid = document.getElementById('hub-grid');
   grid.innerHTML = profiles.map(profile => {
@@ -952,22 +1065,38 @@ function renderHub(profiles, hub = {}) {
       ? `--hub-card-accent: ${profile.theme.primary};${profile.theme.primaryContainer ? ` --hub-card-accent-container: ${profile.theme.primaryContainer};` : ''}`
       : '';
     const cardLogoSrc = withCacheBust(rom.logoImage || 'assets/img/logo.svg', profile.assetVersion);
+
     const statusConfig = STATUS_CONFIG[profile.status];
     const statusBadge = statusConfig
       ? `<span class="hub-card-status hub-card-status-${profile.status}">${statusConfig.badgeLabel}</span>`
       : '';
-    const cardStatusClass = profile.status === 'discontinued' ? ' hub-card-discontinued' : '';
+
+    const otaSupported = Boolean(profile.remote && profile.remote.releaseJsonUrl);
+    const badges = [
+      profile.featured ? '<span class="hub-card-badge hub-card-badge-featured">Featured</span>' : '',
+      release.codename ? `<span class="hub-card-badge hub-card-badge-build">${release.codename}</span>` : '',
+      otaSupported ? '<span class="hub-card-badge hub-card-badge-ota">OTA</span>' : ''
+    ].filter(Boolean).join('');
+
+    const updatedLabel = release.date ? `Updated ${formatRelativeDate(release.date)}` : '';
+
+    const cardModifierClasses = [
+      profile.status === 'discontinued' ? ' hub-card-discontinued' : '',
+      profile.featured ? ' hub-card-featured' : ''
+    ].join('');
 
     return `
-      <div class="hub-card reveal${cardStatusClass}" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
+      <div class="hub-card reveal${cardModifierClasses}" role="button" tabindex="0" data-profile-id="${profile.id}" style="${accentStyle}">
         <div class="hub-card-logo"><img src="${cardLogoSrc}" alt="" decoding="async" loading="lazy"></div>
         <div>
           <div class="hub-card-name">${rom.name || profile.label || profile.id}${statusBadge}</div>
           <div class="hub-card-device">${device.name || ''}${device.codename ? ` (${device.codename})` : ''}</div>
         </div>
+        ${badges ? `<div class="hub-card-badges">${badges}</div>` : ''}
         <div class="hub-card-meta">
           ${release.version ? `<span>v${release.version}</span>` : ''}
           ${release.androidBase ? `<span>${release.androidBase}</span>` : ''}
+          ${updatedLabel ? `<span>${updatedLabel}</span>` : ''}
         </div>
       </div>
     `;
@@ -1126,6 +1255,97 @@ function initHubNavigation(profiles) {
   });
 
   window.addEventListener('popstate', () => restoreFromUrl(profiles));
+
+  // "Home" in the desktop hub nav is only ever shown while already on the
+  // hub, so it just scrolls back to the top instead of navigating anywhere.
+  document.getElementById('hub-nav-home').addEventListener('click', (event) => {
+    event.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+
+function scrollToRomsGrid() {
+  const grid = document.getElementById('hub-grid');
+  if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openNavDrawer() {
+  document.getElementById('nav-drawer').classList.add('open');
+  document.getElementById('nav-drawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('nav-menu-toggle').setAttribute('aria-expanded', 'true');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeNavDrawer() {
+  document.getElementById('nav-drawer').classList.remove('open');
+  document.getElementById('nav-drawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('nav-menu-toggle').setAttribute('aria-expanded', 'false');
+  document.body.style.overflow = '';
+}
+
+// Mobile hamburger + slide-in drawer. Shown on every view (unlike the
+// desktop hub-only nav-links) since it's the only nav access on mobile.
+function initNavDrawer(profiles) {
+  const drawer = document.getElementById('nav-drawer');
+
+  document.getElementById('nav-menu-toggle').addEventListener('click', () => {
+    if (drawer.classList.contains('open')) closeNavDrawer();
+    else openNavDrawer();
+  });
+
+  document.getElementById('nav-drawer-close').addEventListener('click', closeNavDrawer);
+  document.getElementById('nav-drawer-backdrop').addEventListener('click', closeNavDrawer);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && drawer.classList.contains('open')) closeNavDrawer();
+  });
+
+  document.getElementById('nav-drawer-panel').addEventListener('click', (event) => {
+    const link = event.target.closest('[data-drawer-action]');
+    if (!link) return;
+    const action = link.dataset.drawerAction;
+
+    if (action !== 'home' && action !== 'roms') {
+      closeNavDrawer(); // github/telegram are plain external links — just close and let them navigate
+      return;
+    }
+
+    event.preventDefault();
+    closeNavDrawer();
+    const isHubVisible = !document.getElementById('hub-view').hidden;
+
+    if (action === 'home') {
+      if (isHubVisible) window.scrollTo({ top: 0, behavior: 'smooth' });
+      else goToHub(profiles, 'push');
+    } else {
+      if (isHubVisible) {
+        scrollToRomsGrid();
+      } else {
+        goToHub(profiles, 'push');
+        setTimeout(scrollToRomsGrid, 60); // let the hub view render before scrolling to it
+      }
+    }
+  });
+}
+
+// Material-style ripple feedback on any .btn click, delegated so it works
+// for buttons injected later (e.g. per-profile download/release buttons).
+function initButtonRipple() {
+  document.addEventListener('click', (event) => {
+    const btn = event.target.closest('.btn');
+    if (!btn) return;
+
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const ripple = document.createElement('span');
+    ripple.className = 'btn-ripple';
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
+
+    btn.appendChild(ripple);
+    ripple.addEventListener('animationend', () => ripple.remove());
+  });
 }
 
 // Shown if data.json fails to load or anything during setup throws — so a
@@ -1168,15 +1388,24 @@ async function init() {
   try {
     const { profiles: rawProfiles, defaultProfileId, hub } = normalizeProfiles(rawData);
 
-    // defaultProfileId just orders the hub grid (shown first) — it no longer
-    // controls routing; the hub is always the landing page unless ?rom= is set.
-    const profiles = defaultProfileId
-      ? [...rawProfiles].sort((a, b) => (a.id === defaultProfileId ? -1 : b.id === defaultProfileId ? 1 : 0))
-      : rawProfiles;
+    // Sort order: featured profile(s) first, then defaultProfileId (just
+    // controls grid order, not routing — the hub is always the landing page
+    // unless ?rom= is set), then whatever order they're listed in.
+    const profiles = [...rawProfiles].sort((a, b) => {
+      const featuredDiff = (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
+      if (featuredDiff !== 0) return featuredDiff;
+      if (defaultProfileId) {
+        if (a.id === defaultProfileId) return -1;
+        if (b.id === defaultProfileId) return 1;
+      }
+      return 0;
+    });
 
     currentHub = hub;
     renderHub(profiles, hub);
     initHubNavigation(profiles);
+    initNavDrawer(profiles);
+    initButtonRipple();
     initHeaderScrollState();
     initCodeCopyButtons();
     initLightbox();
