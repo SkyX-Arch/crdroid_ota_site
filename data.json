@@ -9,6 +9,8 @@
     "subtitle": "All custom ROM builds maintained by SkyX-Arch — pick a device below.",
     "logoImage": "assets/img/logo main.svg",
     "assetVersion": "1",
+	"githubUrl": "https://github.com/SkyX-Arch",
+    "telegramUrl": "https://t.me/SkyXArch",
     "donate": {
       "_comment": "Optional. Shown as a small, easy-to-miss-on-purpose 'Support this project' link in the footer — omit a currency to hide it, or omit 'donate' entirely to hide the link altogether. Acts as the site-wide default; a profile can set its own 'donate' block to override this for just that ROM.",
       "bitcoin": "bc1pngx5j2sf6mhkpl8579jc5t6zn80rstrvkygu5ljclfg3jntlpkes08jqms",
@@ -21,6 +23,8 @@
       "id": "crdroid-plato",
       "label": "crDroid — Xiaomi 12T",
       "assetVersion": "1",
+	  "featuredComment": "Optional. Set to true on whichever profile is the primary/flagship project — shows a 'Featured' badge and a slightly larger, first-position card on the hub grid.",
+      "featured": true,
 
       "remote": {
         "_comment": "Live data sources for this device. Point releaseJsonUrl/changelogUrl at your own ROM's feed to switch devices.",
@@ -189,7 +193,8 @@
       "id": "axionos-plato",
       "label": "AxionOS — Xiaomi 12T",
       "assetVersion": "1",
-
+	  "status": "frozen",
+      
       "remote": {
         "releaseJsonUrl": "https://skyx-arch.github.io/axionos-ota/plato.json",
         "changelogUrl": "https://skyx-arch.github.io/axionos-ota/plato_changelog.txt",
